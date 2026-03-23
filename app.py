@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from pathlib import Path
+import os
 
 # =============================================================================
 # CONFIGURACIÓN DE LA PÁGINA
@@ -35,7 +36,12 @@ st.markdown("""
 # =============================================================================
 # CONSTANTES
 # =============================================================================
-PARQUET_PATH = Path(r"e:\DEA_0\Cambio_Climatico_Unificado.parquet")
+PARQUET_PATH = "https://huggingface.co/datasets/carlospurizaca/PresupuestoCambioClimatico"
+# Token de Hugging Face (lo obtienes desde Streamlit Secrets)
+HF_TOKEN = os.environ.get("HF_TOKEN")
+
+# Headers para autenticación si el dataset es privado
+HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else None
 
 COLS_NECESARIAS = [
     'ANO_EJE', 'NIVEL_GOBIERNO_NOMBRE',
@@ -86,7 +92,11 @@ def _cargar_parquet():
         return None
     schema = pl.read_parquet_schema(PARQUET_PATH)
     cols = [c for c in COLS_NECESARIAS if c in schema]
-    lf = pl.scan_parquet(PARQUET_PATH).select(cols)
+    lf = pl.scan_parquet(
+        PARQUET_PATH,
+        storage_options={"headers": HF_HEADERS} if HF_HEADERS else None
+    ).select(cols)
+
     cast = []
     for c in COLS_MONTOS:
         if c in cols:
