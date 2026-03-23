@@ -36,7 +36,7 @@ st.markdown("""
 # =============================================================================
 # CONSTANTES
 # =============================================================================
-PARQUET_PATH = "https://huggingface.co/datasets/carlospurizaca/PresupuestoCambioClimatico/blob/main/Cambio_Climatico_Unificado.parquet"
+PARQUET_PATH = "https://huggingface.co/datasets/carlospurizaca/PresupuestoCambioClimatico/resolve/main/Cambio_Climatico_Unificado.parquet?download=1"
 # Token de Hugging Face (lo obtienes desde Streamlit Secrets)
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
