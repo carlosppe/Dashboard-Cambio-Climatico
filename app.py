@@ -91,32 +91,25 @@ def _cargar_parquet():
 
     # --- Caso 1: archivo remoto (URL Hugging Face) ---
     if isinstance(PARQUET_PATH, str) and PARQUET_PATH.startswith("http"):
-        # Leer esquema remoto
-        schema = pl.read_parquet_schema(
-            PARQUET_PATH,
-            storage_options={"headers": HF_HEADERS} if HF_HEADERS else None
-        )
-
-        cols = [c for c in COLS_NECESARIAS if c in schema]
-
         lf = pl.scan_parquet(
             PARQUET_PATH,
             storage_options={"headers": HF_HEADERS} if HF_HEADERS else None
-        ).select(cols)
+        )
+        cols = [c for c in COLS_NECESARIAS if c in lf.columns]
+        lf = lf.select(cols)
 
-    # --- Caso 2: archivo local (solo para desarrollo) ---
+    # --- Caso 2: archivo local ---
     else:
         p = Path(PARQUET_PATH)
         if not p.exists():
             st.error("Archivo Parquet no encontrado en ruta local.")
             return pl.DataFrame()
 
-        schema = pl.read_parquet_schema(p)
-        cols = [c for c in COLS_NECESARIAS if c in schema]
+        lf = pl.scan_parquet(p)
+        cols = [c for c in COLS_NECESARIAS if c in lf.columns]
+        lf = lf.select(cols)
 
-        lf = pl.scan_parquet(p).select(cols)
-
-    # --- Casting de columnas numéricas ---
+    # --- Casting de columnas ---
     cast = []
     for c in COLS_MONTOS:
         if c in cols:
