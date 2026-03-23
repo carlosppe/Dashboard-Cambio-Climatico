@@ -87,26 +87,48 @@ SIMBOLOS_BOX = [
 # =============================================================================
 @st.cache_data
 def _cargar_parquet():
-    """Carga Parquet con Polars (solo columnas necesarias)."""
-    if not PARQUET_PATH.exists():
-        return None
-    schema = pl.read_parquet_schema(PARQUET_PATH)
-    cols = [c for c in COLS_NECESARIAS if c in schema]
-    lf = pl.scan_parquet(
-        PARQUET_PATH,
-        storage_options={"headers": HF_HEADERS} if HF_HEADERS else None
-    ).select(cols)
+    """Carga Parquet desde Hugging Face o ruta local, con columnas necesarias."""
 
+    # --- Caso 1: archivo remoto (URL Hugging Face) ---
+    if isinstance(PARQUET_PATH, str) and PARQUET_PATH.startswith("http"):
+        # Leer esquema remoto
+        schema = pl.read_parquet_schema(
+            PARQUET_PATH,
+            storage_options={"headers": HF_HEADERS} if HF_HEADERS else None
+        )
+
+        cols = [c for c in COLS_NECESARIAS if c in schema]
+
+        lf = pl.scan_parquet(
+            PARQUET_PATH,
+            storage_options={"headers": HF_HEADERS} if HF_HEADERS else None
+        ).select(cols)
+
+    # --- Caso 2: archivo local (solo para desarrollo) ---
+    else:
+        p = Path(PARQUET_PATH)
+        if not p.exists():
+            st.error("Archivo Parquet no encontrado en ruta local.")
+            return pl.DataFrame()
+
+        schema = pl.read_parquet_schema(p)
+        cols = [c for c in COLS_NECESARIAS if c in schema]
+
+        lf = pl.scan_parquet(p).select(cols)
+
+    # --- Casting de columnas numéricas ---
     cast = []
     for c in COLS_MONTOS:
         if c in cols:
             cast.append(pl.col(c).cast(pl.Float64, strict=False).fill_null(0.0))
+
     if 'ANO_EJE' in cols:
         cast.append(pl.col('ANO_EJE').cast(pl.Int32, strict=False))
+
     if cast:
         lf = lf.with_columns(cast)
-    return lf.collect()
 
+    return lf.collect()
 
 @st.cache_resource
 def _init_db():
