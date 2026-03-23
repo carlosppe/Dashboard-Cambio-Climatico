@@ -98,7 +98,7 @@ def _cargar_parquet():
         cols = [c for c in COLS_NECESARIAS if c in lf.columns]
         lf = lf.select(cols)
 
-    # --- Caso 2: archivo local ---
+    # --- Caso 2: archivo local (solo desarrollo) ---
     else:
         p = Path(PARQUET_PATH)
         if not p.exists():
