@@ -41,7 +41,10 @@ PARQUET_PATH = "https://huggingface.co/datasets/carlospurizaca/PresupuestoCambio
 HF_TOKEN = os.environ.get("HF_TOKEN")
 
 # Headers para autenticación si el dataset es privado
-HF_HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else None
+HF_HEADERS = (
+    f"Authorization: Bearer {HF_TOKEN}"
+    if HF_TOKEN else None
+)
 
 COLS_NECESARIAS = [
     'ANO_EJE', 'NIVEL_GOBIERNO_NOMBRE',
