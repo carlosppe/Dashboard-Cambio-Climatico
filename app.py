@@ -159,8 +159,6 @@ def _sql(query: str):
 
 con, df, n = _init_db()
 
-if con is None or df is None or n == 0:
-    st.stop()
 
 
 
@@ -387,8 +385,7 @@ def formatear_numero(valor, tipo='moneda'):
 
 
 def mostrar_tabla(df_pd: pd.DataFrame, height: int = 500):
-    fmt = {k: v for k, v in TABLE_FORMAT.items() if k in df_pd.columns}
-    st.dataframe(df_pd.style.format(fmt, na_rep=''), use_container_width=True, height=height)
+    st.dataframe(df_pd, use_container_width=True, height=height)
 
 
 def chart_bar_top(df_pd: pd.DataFrame, dim_col: str, title: str, top_n: int = 10):
@@ -413,7 +410,7 @@ def main():
         st.error("❌ No se encontró el Parquet. Ejecuta primero csv_a_parquet.py")
         return
 
-    st.success(f"✅ Datos cargados: {n_rows:,} registros  (Polars + DuckDB persistente)")
+    st.caption(f"✅ Datos cargados: {n_rows:,} registros")
 
     # =========================================================================
     # FILTROS LATERALES – construyen WHERE clause incrementalmente
@@ -547,11 +544,7 @@ def main():
             st.markdown("### Evolución Anual")
             df_anual = obtener_evolucion_anual(sidebar_where)
             if not df_anual.empty:
-                st.dataframe(df_anual.style.format({
-                    'ANO_EJE': '{:.0f}', 'NumProy': '{:,.0f}', 'NumProy+': '{:,.0f}',
-                    'M_PIA': '{:,.2f}', 'M_PIM': '{:,.2f}', 'M_Devengado': '{:,.2f}',
-                    'R_Dev-PIM': '{:.2f}%'
-                }, na_rep=''), use_container_width=True)
+                st.dataframe(df_anual, use_container_width=True)
 
                 x_a = df_anual['ANO_EJE'].astype(int).astype(str)
                 ax_cat = dict(type='category', categoryorder='array', categoryarray=x_a.tolist())
@@ -684,13 +677,7 @@ def main():
                          'Desv.Est.', 'Coef. Variación', 'Kurtosis', 'Mín', 'Q1', 'Q2', 'Q3',
                          'Máx', 'Rango']
             df_disp = df_var[[c for c in cols_show if c in df_var.columns]].copy()
-            st.dataframe(df_disp.style.format({
-                'NumProy (base)': '{:,.0f}', 'Conteo No Cero': '{:,.0f}',
-                'Suma': '{:,.2f}', 'Media': '{:,.2f}', 'Mediana': '{:,.2f}',
-                'Desv.Est.': '{:,.2f}', 'Coef. Variación': '{:,.2f}%', 'Kurtosis': '{:,.4f}',
-                'Mín': '{:,.2f}', 'Q1': '{:,.2f}', 'Q2': '{:,.2f}', 'Q3': '{:,.2f}',
-                'Máx': '{:,.2f}', 'Rango': '{:,.2f}',
-            }, na_rep=''), use_container_width=True)
+            st.dataframe(df_disp, use_container_width=True)
 
             st.markdown("---")
             ax_cat = dict(type='category', categoryorder='array', categoryarray=anos_ticks)
@@ -869,12 +856,7 @@ def main():
 
                 if interpret_rows:
                     df_interp = pd.DataFrame(interpret_rows).sort_values('Año')
-                    st.dataframe(df_interp.style.format({
-                        'Pico principal (S/)': '{:,.2f}', 'Media (S/)': '{:,.2f}',
-                        'Mediana (S/)': '{:,.2f}', 'Q1 (S/)': '{:,.2f}', 'Q3 (S/)': '{:,.2f}',
-                        'Coef. Variación (%)': '{:,.2f}', 'Kurtosis': '{:,.4f}',
-                        'Asimetría': '{:,.4f}',
-                    }), use_container_width=True)
+                    st.dataframe(df_interp, use_container_width=True)
 
                     resumen = []
                     if df_interp['Coef. Variación (%)'].notna().any():
@@ -891,15 +873,15 @@ def main():
                     if resumen:
                         st.markdown("\n".join(resumen))
 
+            else:
+                st.info("No hay datos suficientes para el Box Plot con los filtros seleccionados.")
+
             # ==================================================================
             # CUARTILES
             # ==================================================================
             st.markdown("#### Cuartiles, Media y Mediana por Año")
             df_q = df_var[['Año', 'Q1', 'Q2', 'Q3', 'Media', 'Mediana']].copy().sort_values('Año')
-            st.dataframe(df_q.style.format({
-                'Q1': '{:,.2f}', 'Q2': '{:,.2f}', 'Q3': '{:,.2f}',
-                'Media': '{:,.2f}', 'Mediana': '{:,.2f}'
-            }), use_container_width=True)
+            st.dataframe(df_q, use_container_width=True)
 
             x_q = df_q['Año'].astype(int).astype(str)
             fig_q = go.Figure()
