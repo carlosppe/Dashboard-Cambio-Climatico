@@ -42,7 +42,7 @@ HF_TOKEN = os.environ.get("HF_TOKEN")
 
 # Headers para autenticación si el dataset es privado
 HF_HEADERS = (
-    f"Authorization: Bearer {HF_TOKEN}"
+    f"Authorization: Bearer {HF_TOKEN}\nUser-Agent: python"
     if HF_TOKEN else None
 )
 
@@ -96,7 +96,7 @@ def _cargar_parquet():
     if isinstance(PARQUET_PATH, str) and PARQUET_PATH.startswith("http"):
         lf = pl.scan_parquet(
             PARQUET_PATH,
-            storage_options={"headers": HF_HEADERS} if HF_HEADERS else None
+            storage_options={"headers": HF_HEADERS}
         )
         cols = [c for c in COLS_NECESARIAS if c in lf.columns]
         lf = lf.select(cols)
