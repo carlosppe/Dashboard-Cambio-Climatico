@@ -156,6 +156,21 @@ def _init_db():
 
     # Retornar conexión, df y número de filas
     return con, df, df.shape[0]
+   
+# FUNCIÓN SQL SEGURA (evita errores en el frontend)
+
+def _sql(query: str):
+    con, _, _ = _init_db()
+    if con is None:
+        st.error("No hay conexión a la base de datos.")
+        return None
+    return con.sql(query)
+
+con, df, n = _init_db()
+
+if con is None or df is None or n == 0:
+    st.stop()
+
 
 
 # =============================================================================
