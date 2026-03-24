@@ -86,33 +86,44 @@ SIMBOLOS_BOX = [
 
 
 # =============================================================================
-# CAPA DE DATOS – Conexión DuckDB persistente (se crea UNA sola vez)
+# CAPA DE DATOS – Cargar Parquet desde Hugging Face usando requests
 # =============================================================================
+import requests
+import io
+
 @st.cache_data
 def _cargar_parquet():
-    """Carga Parquet desde Hugging Face o ruta local, con columnas necesarias."""
+    """Carga Parquet desde Hugging Face (privado o público) usando requests."""
 
-    # --- Caso 1: archivo remoto (URL Hugging Face) ---
-    if isinstance(PARQUET_PATH, str) and PARQUET_PATH.startswith("http"):
-        lf = pl.scan_parquet(
-            PARQUET_PATH,
-            storage_options={"headers": HF_HEADERS}
-        )
-        cols = [c for c in COLS_NECESARIAS if c in lf.columns]
-        lf = lf.select(cols)
+    HF_TOKEN = os.environ.get("HF_TOKEN")
 
-    # --- Caso 2: archivo local (solo desarrollo) ---
-    else:
-        p = Path(PARQUET_PATH)
-        if not p.exists():
-            st.error("Archivo Parquet no encontrado en ruta local.")
-            return pl.DataFrame()
+    if not HF_TOKEN:
+        st.error("No se encontró HF_TOKEN en los Secrets de Streamlit.")
+        return pl.DataFrame()
 
-        lf = pl.scan_parquet(p)
-        cols = [c for c in COLS_NECESARIAS if c in lf.columns]
-        lf = lf.select(cols)
+    # Headers correctos para Hugging Face
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}",
+        "User-Agent": "python"
+    }
 
-    # --- Casting de columnas ---
+    # Descargar el archivo Parquet
+    try:
+        r = requests.get(PARQUET_PATH, headers=headers)
+        r.raise_for_status()
+    except Exception as e:
+        st.error(f"Error descargando el Parquet desde Hugging Face: {e}")
+        return pl.DataFrame()
+
+    # Leer el Parquet desde memoria
+    buffer = io.BytesIO(r.content)
+    df = pl.read_parquet(buffer)
+
+    # Filtrar columnas necesarias
+    cols = [c for c in COLS_NECESARIAS if c in df.columns]
+    df = df.select(cols)
+
+    # Casting de columnas numéricas
     cast = []
     for c in COLS_MONTOS:
         if c in cols:
@@ -122,26 +133,29 @@ def _cargar_parquet():
         cast.append(pl.col('ANO_EJE').cast(pl.Int32, strict=False))
 
     if cast:
-        lf = lf.with_columns(cast)
+        df = df.with_columns(cast)
 
-    return lf.collect()
+    return df
 
 @st.cache_resource
 def _init_db():
-    """Conexión DuckDB persistente con datos registrados UNA vez."""
+    """Conexión DuckDB persistente con datos cargados UNA sola vez."""
+
     df = _cargar_parquet()
-    if df is None:
+
+    # Si hubo error al cargar el Parquet
+    if df is None or df.is_empty():
+        st.error("No se pudo cargar el dataset desde Hugging Face.")
         return None, None, 0
+
+    # Crear conexión persistente
     con = duckdb.connect()
-    con.register('datos', df)
-    # Retornar df para mantener referencia viva (evitar GC) 
+
+    # Registrar el DataFrame en memoria
+    con.register("datos", df)
+
+    # Retornar conexión, df y número de filas
     return con, df, df.shape[0]
-
-
-def _sql(query: str):
-    """Ejecuta SQL sobre el DuckDB persistente."""
-    con, _, _ = _init_db()
-    return con.sql(query)
 
 
 # =============================================================================
