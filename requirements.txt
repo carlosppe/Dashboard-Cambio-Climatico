@@ -1,6 +1,7 @@
-streamlit==1.45.1
+streamlit==1.32.0
 polars
 duckdb
 numpy
 pandas
 plotly
+requests

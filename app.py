@@ -23,14 +23,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.markdown("""
-<style>
-    .main-header {font-size:2rem;font-weight:bold;color:#1f77b4;text-align:center;margin-bottom:1rem}
-    .metric-card {background-color:#f0f2f6;border-radius:10px;padding:15px;text-align:center}
-    .stDataFrame {font-size:12px}
-    div[data-testid="stMetricValue"] {font-size:1.5rem}
-</style>
-""", unsafe_allow_html=True)
 
 # =============================================================================
 # CONSTANTES
@@ -493,13 +485,17 @@ def main():
     # =========================================================================
     # PESTAÑAS PRINCIPALES
     # =========================================================================
-    tab_principal, tab_estadisticas = st.tabs(
-        ["📊 Dashboard Principal", "📈 Análisis Estadístico"])
+    st.sidebar.markdown("---")
+    seccion = st.sidebar.radio(
+        "📂 Sección",
+        ["📊 Dashboard Principal", "📈 Análisis Estadístico"],
+        key="seccion_principal"
+    )
 
     # =========================================================================
     # PESTAÑA 1: DASHBOARD PRINCIPAL
     # =========================================================================
-    with tab_principal:
+    if seccion == "📊 Dashboard Principal":
         st.markdown("---")
         st.markdown("### 📈 Indicadores Principales")
 
@@ -658,7 +654,7 @@ def main():
     # =========================================================================
     # PESTAÑA 2: ANÁLISIS ESTADÍSTICO
     # =========================================================================
-    with tab_estadisticas:
+    elif seccion == "📈 Análisis Estadístico":
         st.markdown("### Filtros de Análisis Estadístico")
 
         # Cascada de filtros — cada dropdown usa DuckDB con WHERE progresivo
