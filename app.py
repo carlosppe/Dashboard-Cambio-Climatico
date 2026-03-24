@@ -731,7 +731,7 @@ def main():
                 st.plotly_chart(fig_k, use_container_width=True)
 
             # ==================================================================
-            # BOX PLOT – WebGL (Scattergl) para evitar congelamiento del browser
+            # BOX PLOT – con puntos jitter por año
             # ==================================================================
             st.markdown("#### Gráfico de Cajas (Box Plot) por Año")
 
@@ -766,8 +766,8 @@ def main():
 
                     jitter = np.random.default_rng(42 + i).uniform(-0.25, 0.25, len(display))
 
-                    # *** Scattergl = WebGL = NO congela el browser ***
-                    fig_box.add_trace(go.Scattergl(
+                    # *** Scatter (SVG) para compatibilidad con go.Box ***
+                    fig_box.add_trace(go.Scatter(
                         x=(i + jitter).tolist(), y=display.tolist(), mode='markers',
                         marker=dict(size=5, color=color, opacity=0.55),
                         name=str(ano), legendgroup=str(ano), showlegend=False,
