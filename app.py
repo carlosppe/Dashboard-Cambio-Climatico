@@ -11,7 +11,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from pathlib import Path
 import os
 
 # =============================================================================
@@ -395,12 +394,12 @@ def formatear_numero(valor, tipo='moneda'):
     return str(valor)
 
 
-def mostrar_tabla(df_pd: pd.DataFrame, height: int = 500):
+def mostrar_tabla(df_pd: pd.DataFrame, height: int = 500, table_key: str = None):
     fmt = {k: v for k, v in TABLE_FORMAT.items() if k in df_pd.columns}
-    st.dataframe(df_pd.style.format(fmt, na_rep=''), use_container_width=True, height=height)
+    st.dataframe(df_pd.style.format(fmt, na_rep=''), use_container_width=True, height=height, key=table_key)
 
 
-def chart_bar_top(df_pd: pd.DataFrame, dim_col: str, title: str, top_n: int = 10):
+def chart_bar_top(df_pd: pd.DataFrame, dim_col: str, title: str, top_n: int = 10, chart_key: str = None):
     df_top = df_pd[df_pd[dim_col] != 'Total'].nlargest(top_n, 'M_Devengado')
     fig = px.bar(df_top, x='M_Devengado', y=dim_col, orientation='h',
                  color='R_Dev-PIM', color_continuous_scale='RdYlGn',
@@ -408,15 +407,14 @@ def chart_bar_top(df_pd: pd.DataFrame, dim_col: str, title: str, top_n: int = 10
                  title=title)
     fig.update_layout(yaxis={'categoryorder': 'total ascending'},
                       height=max(400, top_n * 30))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=chart_key)
 
 
 # =============================================================================
 # INTERFAZ PRINCIPAL
 # =============================================================================
 def main():
-    st.markdown('<h1 class="main-header">📊 Dashboard de Ejecución Presupuestal (v3)</h1>',
-                unsafe_allow_html=True)
+    st.title("📊 Dashboard de Ejecución Presupuestal (v3)")
 
     con, _, n_rows = _init_db()
     if con is None:
@@ -528,10 +526,14 @@ def main():
             st.markdown("### Análisis por SECTOR_NOMBRE")
             with st.spinner("Procesando…"):
                 df_sec = crear_tabla_agrupada(sidebar_where, 'SECTOR_NOMBRE')
-            if not df_sec.empty:
-                mostrar_tabla(df_sec)
-                st.markdown("#### Top 10 Sectores por Devengado")
-                chart_bar_top(df_sec, 'SECTOR_NOMBRE', 'Top 10 Sectores - Monto Devengado', 10)
+            with st.container():
+                if not df_sec.empty:
+                    mostrar_tabla(df_sec, table_key="tabla_sector")
+                    st.markdown("#### Top 10 Sectores por Devengado")
+                    chart_bar_top(df_sec, 'SECTOR_NOMBRE', 'Top 10 Sectores - Monto Devengado', 10,
+                                  chart_key="bar_sector")
+                else:
+                    st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Pliego ---
         with tab2:
@@ -543,8 +545,11 @@ def main():
                 where_pli = sidebar_where + f" AND \"SECTOR_NOMBRE\" = '{_esc(sector_sel)}'"
             with st.spinner("Procesando…"):
                 df_pliego = crear_tabla_agrupada(where_pli, 'PLIEGO_NOMBRE')
-            if not df_pliego.empty:
-                mostrar_tabla(df_pliego)
+            with st.container():
+                if not df_pliego.empty:
+                    mostrar_tabla(df_pliego, table_key="tabla_pliego")
+                else:
+                    st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Evolución Anual ---
         with tab3:
@@ -552,82 +557,99 @@ def main():
             with st.spinner("Procesando…"):
                 df_anual = obtener_evolucion_anual(sidebar_where)
 
-            if not df_anual.empty:
-                st.dataframe(df_anual.style.format({
-                    'ANO_EJE': '{:.0f}', 'NumProy': '{:,.0f}', 'NumProy+': '{:,.0f}',
-                    'M_PIA': '{:,.2f}', 'M_PIM': '{:,.2f}', 'M_Devengado': '{:,.2f}',
-                    'R_Dev-PIM': '{:.2f}%'
-                }, na_rep=''), use_container_width=True)
+            with st.container():
+                if not df_anual.empty:
+                    st.dataframe(df_anual.style.format({
+                        'ANO_EJE': '{:.0f}', 'NumProy': '{:,.0f}', 'NumProy+': '{:,.0f}',
+                        'M_PIA': '{:,.2f}', 'M_PIM': '{:,.2f}', 'M_Devengado': '{:,.2f}',
+                        'R_Dev-PIM': '{:.2f}%'
+                    }, na_rep=''), use_container_width=True, key="tabla_evolucion_anual")
 
-                x_a = df_anual['ANO_EJE'].astype(int).astype(str)
-                ax_cat = dict(type='category', categoryorder='array', categoryarray=x_a.tolist())
+                    x_a = df_anual['ANO_EJE'].astype(int).astype(str)
+                    ax_cat = dict(type='category', categoryorder='array', categoryarray=x_a.tolist())
 
-                col_e1, col_e2 = st.columns(2)
-                with col_e1:
-                    fig1 = go.Figure()
-                    fig1.add_trace(go.Bar(name='M_PIA', x=x_a, y=df_anual['M_PIA'], marker_color='#636EFA'))
-                    fig1.add_trace(go.Bar(name='M_PIM', x=x_a, y=df_anual['M_PIM'], marker_color='#EF553B'))
-                    fig1.add_trace(go.Bar(name='M_Devengado', x=x_a, y=df_anual['M_Devengado'], marker_color='#00CC96'))
-                    fig1.update_layout(title='PIA, PIM y Devengado por Año', barmode='group',
-                                       xaxis_title='Año', yaxis_title='Monto (S/)', xaxis=ax_cat)
-                    st.plotly_chart(fig1, use_container_width=True)
-                with col_e2:
-                    fig2 = go.Figure()
-                    fig2.add_trace(go.Scatter(x=x_a, y=df_anual['R_Dev-PIM'],
-                                              mode='lines+markers', name='R_Dev-PIM',
-                                              line=dict(color='#AB63FA', width=3)))
-                    fig2.update_layout(title='Ratio Devengado/PIM', xaxis_title='Año',
-                                       yaxis_title='%', yaxis=dict(range=[0, 100]), xaxis=ax_cat)
-                    st.plotly_chart(fig2, use_container_width=True)
+                    col_e1, col_e2 = st.columns(2)
+                    with col_e1:
+                        fig1 = go.Figure()
+                        fig1.add_trace(go.Bar(name='M_PIA', x=x_a, y=df_anual['M_PIA'], marker_color='#636EFA'))
+                        fig1.add_trace(go.Bar(name='M_PIM', x=x_a, y=df_anual['M_PIM'], marker_color='#EF553B'))
+                        fig1.add_trace(go.Bar(name='M_Devengado', x=x_a, y=df_anual['M_Devengado'], marker_color='#00CC96'))
+                        fig1.update_layout(title='PIA, PIM y Devengado por Año', barmode='group',
+                                           xaxis_title='Año', yaxis_title='Monto (S/)', xaxis=ax_cat)
+                        st.plotly_chart(fig1, use_container_width=True, key="barras_pia_pim")
+                    with col_e2:
+                        fig2 = go.Figure()
+                        fig2.add_trace(go.Scatter(x=x_a, y=df_anual['R_Dev-PIM'],
+                                                  mode='lines+markers', name='R_Dev-PIM',
+                                                  line=dict(color='#AB63FA', width=3)))
+                        fig2.update_layout(title='Ratio Devengado/PIM', xaxis_title='Año',
+                                           yaxis_title='%', yaxis=dict(range=[0, 100]), xaxis=ax_cat)
+                        st.plotly_chart(fig2, use_container_width=True, key="ratio_devpim")
 
-                fig3 = go.Figure()
-                fig3.add_trace(go.Scatter(x=x_a, y=df_anual['NumProy'],
-                    mode='lines+markers+text', name='NumProy',
-                    text=df_anual['NumProy'].apply(lambda v: f'{int(v):,}'),
-                    textposition='top center', line=dict(color='#19D3F3', width=2)))
-                fig3.update_layout(title='Número de Proyectos por Año',
-                                   xaxis_title='Año', yaxis_title='Proyectos', xaxis=ax_cat)
-                st.plotly_chart(fig3, use_container_width=True)
+                    fig3 = go.Figure()
+                    fig3.add_trace(go.Scatter(x=x_a, y=df_anual['NumProy'],
+                        mode='lines+markers+text', name='NumProy',
+                        text=df_anual['NumProy'].apply(lambda v: f'{int(v):,}'),
+                        textposition='top center', line=dict(color='#19D3F3', width=2)))
+                    fig3.update_layout(title='Número de Proyectos por Año',
+                                       xaxis_title='Año', yaxis_title='Proyectos', xaxis=ax_cat)
+                    st.plotly_chart(fig3, use_container_width=True, key="numproy_anual")
+                else:
+                    st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Departamento ---
         with tab4:
             st.markdown("### Análisis por Departamento")
             with st.spinner("Procesando…"):
                 df_dep = crear_tabla_agrupada(sidebar_where, 'DEPARTAMENTO_EJECUTORA_NOMBRE')
-            if not df_dep.empty:
-                mostrar_tabla(df_dep)
-                st.markdown("#### Mapa de Calor: Devengado por Departamento y Año")
-                with st.spinner("Generando mapa…"):
-                    pivot_df = obtener_heatmap_depto(sidebar_where)
-                if not pivot_df.empty:
-                    pt = pivot_df.pivot(index='DEPARTAMENTO_EJECUTORA_NOMBRE',
-                                        columns='ANO_EJE', values='DEV').fillna(0)
-                    fig = px.imshow(pt, labels=dict(x="Año", y="Departamento", color="Devengado"),
-                                    aspect="auto", color_continuous_scale="YlOrRd")
-                    fig.update_layout(height=600)
-                    st.plotly_chart(fig, use_container_width=True)
+            with st.container():
+                if not df_dep.empty:
+                    mostrar_tabla(df_dep, table_key="tabla_departamento")
+                    st.markdown("#### Mapa de Calor: Devengado por Departamento y Año")
+                    with st.spinner("Generando mapa…"):
+                        pivot_df = obtener_heatmap_depto(sidebar_where)
+                    with st.container():
+                        if not pivot_df.empty:
+                            pt = pivot_df.pivot(index='DEPARTAMENTO_EJECUTORA_NOMBRE',
+                                                columns='ANO_EJE', values='DEV').fillna(0)
+                            fig = px.imshow(pt, labels=dict(x="Año", y="Departamento", color="Devengado"),
+                                            aspect="auto", color_continuous_scale="YlOrRd")
+                            fig.update_layout(height=600)
+                            st.plotly_chart(fig, use_container_width=True, key="heatmap_depto")
+                        else:
+                            st.info("No hay datos de heatmap para mostrar con los filtros seleccionados.")
+                else:
+                    st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Grupo Funcional ---
         with tab5:
             st.markdown("### Análisis por Grupo Funcional")
             with st.spinner("Procesando…"):
                 df_gf = crear_tabla_agrupada(sidebar_where, 'GRUPO_FUNCIONAL_NOMBRE')
-            if not df_gf.empty:
-                mostrar_tabla(df_gf)
-                st.markdown("#### Top 15 Grupos Funcionales por Devengado")
-                chart_bar_top(df_gf, 'GRUPO_FUNCIONAL_NOMBRE',
-                              'Top 15 Grupos Funcionales - Monto Devengado', 15)
+            with st.container():
+                if not df_gf.empty:
+                    mostrar_tabla(df_gf, table_key="tabla_grupo_funcional")
+                    st.markdown("#### Top 15 Grupos Funcionales por Devengado")
+                    chart_bar_top(df_gf, 'GRUPO_FUNCIONAL_NOMBRE',
+                                  'Top 15 Grupos Funcionales - Monto Devengado', 15,
+                                  chart_key="bar_grupo_func")
+                else:
+                    st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Función ---
         with tab6:
             st.markdown("### Análisis por Función")
             with st.spinner("Procesando…"):
                 df_fn = crear_tabla_agrupada(sidebar_where, 'FUNCION_NOMBRE')
-            if not df_fn.empty:
-                mostrar_tabla(df_fn)
-                st.markdown("#### Top 15 Funciones por Devengado")
-                chart_bar_top(df_fn, 'FUNCION_NOMBRE',
-                              'Top 15 Funciones - Monto Devengado', 15)
+            with st.container():
+                if not df_fn.empty:
+                    mostrar_tabla(df_fn, table_key="tabla_funcion")
+                    st.markdown("#### Top 15 Funciones por Devengado")
+                    chart_bar_top(df_fn, 'FUNCION_NOMBRE',
+                                  'Top 15 Funciones - Monto Devengado', 15,
+                                  chart_key="bar_funcion")
+                else:
+                    st.info("No hay datos para mostrar con los filtros seleccionados.")
 
     # =========================================================================
     # PESTAÑA 2: ANÁLISIS ESTADÍSTICO
@@ -671,259 +693,256 @@ def main():
         with st.spinner("Calculando estadísticas descriptivas…"):
             df_stats = calcular_estadisticas(stats_where)
 
-        if not df_stats.empty:
-            variables = sorted(df_stats['Variable'].unique())
-            variable_sel = st.selectbox("Seleccionar Variable", variables, key='variable_est')
-            df_var = df_stats[df_stats['Variable'] == variable_sel].sort_values('Año')
-            df_var = df_var[df_var['Año'].between(2000, 2100)]
-            anos_ticks = [str(int(a)) for a in sorted(df_var['Año'].dropna().astype(int).unique())]
-
-            st.markdown(f"#### Estadísticas de {variable_sel}")
-            st.caption("ℹ️ **Conteo (NumProy)** = proyectos únicos con PIA>0 ó PIM>0 ó DEVENGADO>0")
-
-            cols_show = ['Año', 'NumProy (base)', 'Conteo No Cero', 'Suma', 'Media', 'Mediana',
-                         'Desv.Est.', 'Coef. Variación', 'Kurtosis', 'Mín', 'Q1', 'Q2', 'Q3',
-                         'Máx', 'Rango']
-            df_disp = df_var[[c for c in cols_show if c in df_var.columns]].copy()
-            st.dataframe(df_disp.style.format({
-                'NumProy (base)': '{:,.0f}', 'Conteo No Cero': '{:,.0f}',
-                'Suma': '{:,.2f}', 'Media': '{:,.2f}', 'Mediana': '{:,.2f}',
-                'Desv.Est.': '{:,.2f}', 'Coef. Variación': '{:,.2f}%', 'Kurtosis': '{:,.4f}',
-                'Mín': '{:,.2f}', 'Q1': '{:,.2f}', 'Q2': '{:,.2f}', 'Q3': '{:,.2f}',
-                'Máx': '{:,.2f}', 'Rango': '{:,.2f}',
-            }, na_rep=''), use_container_width=True)
-
-            st.markdown("---")
-            ax_cat = dict(type='category', categoryorder='array', categoryarray=anos_ticks)
-            x_v = df_var['Año'].astype(int).astype(str)
-
-            col_g1, col_g2 = st.columns(2)
-            with col_g1:
-                fig_mm = go.Figure()
-                fig_mm.add_trace(go.Scatter(x=x_v, y=df_var['Media'], mode='lines+markers',
-                    name='Media', line=dict(color='#636EFA', width=2), marker=dict(size=8)))
-                fig_mm.add_trace(go.Scatter(x=x_v, y=df_var['Mediana'], mode='lines+markers',
-                    name='Mediana', line=dict(color='#EF553B', width=2, dash='dash'), marker=dict(size=8)))
-                fig_mm.update_layout(title=f'Media y Mediana de {variable_sel}',
-                    xaxis_title='Año', yaxis_title='Valor (S/)', hovermode='x unified', xaxis=ax_cat)
-                st.plotly_chart(fig_mm, use_container_width=True)
-            with col_g2:
-                fig_sd = go.Figure()
-                fig_sd.add_trace(go.Bar(x=x_v, y=df_var['Desv.Est.'], name='Desv.Est.',
-                    marker=dict(color='#00CC96')))
-                fig_sd.update_layout(title=f'Desviación Estándar de {variable_sel}',
-                    xaxis_title='Año', yaxis_title='Desv. Est. (S/)', xaxis=ax_cat)
-                st.plotly_chart(fig_sd, use_container_width=True)
-
-            col_g3, col_g4 = st.columns(2)
-            with col_g3:
-                fig_cv = go.Figure()
-                fig_cv.add_trace(go.Bar(x=x_v, y=df_var['Coef. Variación'],
-                    name='CV', marker=dict(color='#FFA600')))
-                fig_cv.update_layout(title=f'Coef. Variación de {variable_sel}',
-                    xaxis_title='Año', yaxis_title='CV (%)', xaxis=ax_cat)
-                st.plotly_chart(fig_cv, use_container_width=True)
-            with col_g4:
-                fig_k = go.Figure()
-                fig_k.add_trace(go.Scatter(x=x_v, y=df_var['Kurtosis'], mode='lines+markers',
-                    name='Kurtosis', line=dict(color='#BC5090', width=2), marker=dict(size=8)))
-                fig_k.update_layout(title=f'Kurtosis de {variable_sel}',
-                    xaxis_title='Año', yaxis_title='Kurtosis', hovermode='x unified', xaxis=ax_cat)
-                st.plotly_chart(fig_k, use_container_width=True)
-
-            # ==================================================================
-            # BOX PLOT – WebGL (Scattergl) para evitar congelamiento del browser
-            # ==================================================================
-            st.markdown("#### Gráfico de Cajas (Box Plot) por Año")
-
-            with st.spinner("Preparando datos de distribución…"):
-                base_box = _obtener_base_proyectos(stats_where)
-
-            col_var_name = f"MONTO_{variable_sel}"
-
-            if not base_box.is_empty() and col_var_name in base_box.columns:
-                anos_box = sorted([int(a) for a in df_var['Año'].dropna().astype(int).unique()
-                                   if 2000 <= int(a) <= 2100])
-
-                max_puntos = st.slider("Puntos máximos en Box Plot", 500, 8000, 1500, 500,
-                                        key='max_puntos_boxplot')
-
-                # Pre-extraer todos los arrays UNA vez (no 3x por año)
-                arrays_by_year = {}
-                for ano in anos_box:
-                    arr = base_box.filter(pl.col('ANO_EJE') == ano)[col_var_name].to_numpy().astype(np.float64)
-                    arrays_by_year[ano] = np.nan_to_num(arr, 0.0)
-
-                fig_box = go.Figure()
-                for i, ano in enumerate(anos_box):
-                    arr = arrays_by_year[ano]
-                    if len(arr) == 0:
-                        continue
-                    color = COLORES_BOX[i % len(COLORES_BOX)]
-                    simbolo = SIMBOLOS_BOX[i % len(SIMBOLOS_BOX)]
-
-                    cuota = max(1, max_puntos // max(len(anos_box), 1))
-                    if len(arr) > cuota:
-                        display = arr[np.random.default_rng(42).choice(len(arr), cuota, replace=False)]
-                    else:
-                        display = arr
-
-                    jitter = np.random.default_rng(42 + i).uniform(-0.25, 0.25, len(display))
-
-                    # *** Scattergl = WebGL = NO congela el browser ***
-                    fig_box.add_trace(go.Scattergl(
-                        x=(i + jitter).tolist(), y=display.tolist(), mode='markers',
-                        marker=dict(size=5, color=color, opacity=0.55),
-                        name=str(ano), legendgroup=str(ano), showlegend=False,
-                        hovertemplate=f'Año: {ano}<br>Valor: %{{y:,.2f}}<extra></extra>'))
-
-                    q1 = float(np.percentile(arr, 25))
-                    q2 = float(np.median(arr))
-                    q3 = float(np.percentile(arr, 75))
-                    iqr = q3 - q1
-                    lower = arr[arr >= q1 - 1.5 * iqr]
-                    upper = arr[arr <= q3 + 1.5 * iqr]
-                    lf = float(lower.min()) if len(lower) else float(arr.min())
-                    uf = float(upper.max()) if len(upper) else float(arr.max())
-
-                    fig_box.add_trace(go.Box(
-                        x0=i, q1=[q1], median=[q2], q3=[q3],
-                        lowerfence=[lf], upperfence=[uf], mean=[float(np.mean(arr))],
-                        name=str(ano), legendgroup=str(ano), showlegend=True,
-                        boxmean=True, boxpoints=False, width=0.5,
-                        line=dict(width=2, color=color), fillcolor='rgba(255,255,255,0.1)'))
-
-                fig_box.update_layout(
-                    title=f'Distribución de proyectos - {variable_sel} por Año',
-                    xaxis_title='Año', yaxis_title=f'{variable_sel} (S/)',
-                    xaxis=dict(tickvals=list(range(len(anos_box))),
-                               ticktext=[str(a) for a in anos_box]),
-                    legend=dict(title='Año'), height=600)
-                st.plotly_chart(fig_box, use_container_width=True)
-
-                # ==============================================================
-                # DENSIDAD (reutiliza arrays_by_year)
-                # ==============================================================
-                st.markdown("#### Gráfico de Densidad por Año")
-                fig_dens = go.Figure()
-                for i, ano in enumerate(anos_box):
-                    arr = arrays_by_year[ano]
-                    arr = arr[~np.isnan(arr)]
-                    if len(arr) < 2:
-                        continue
-                    density, bins = np.histogram(arr, bins=50, density=True)
-                    centers = (bins[:-1] + bins[1:]) / 2
-                    color = COLORES_BOX[i % len(COLORES_BOX)]
-                    fig_dens.add_trace(go.Scatter(x=centers, y=density, mode='lines',
-                        name=str(ano), line=dict(color=color, width=2),
-                        fill='tozeroy', opacity=0.18))
-                fig_dens.update_layout(title=f'Densidad de {variable_sel} por Año',
-                    xaxis_title=f'{variable_sel} (S/)', yaxis_title='Densidad',
-                    hovermode='x unified', height=460)
-                st.plotly_chart(fig_dens, use_container_width=True)
-
-                # ==============================================================
-                # INTERPRETACIÓN (reutiliza arrays_by_year)
-                # ==============================================================
-                st.markdown("#### Interpretación Automática de la Densidad")
-                interpret_rows = []
-                for ano in anos_box:
-                    fila = df_var[df_var['Año'] == ano]
-                    if fila.empty:
-                        continue
-                    fila = fila.iloc[0]
-                    arr = arrays_by_year[ano]
-                    arr_clean = arr[~np.isnan(arr)]
-                    if len(arr_clean) == 0:
-                        continue
-
-                    dens, bins = np.histogram(arr_clean, bins=60, density=True)
-                    pico_x = (bins[:-1] + bins[1:]) / 2
-                    pico_principal = float(pico_x[np.argmax(dens)])
-
-                    m = float(np.mean(arr_clean))
-                    s = float(np.std(arr_clean, ddof=1)) if len(arr_clean) > 1 else 0.0
-                    if len(arr_clean) > 2 and s > 0:
-                        n = len(arr_clean)
-                        sk = n / ((n-1)*(n-2)) * np.sum(((arr_clean - m) / s) ** 3)
-                    else:
-                        sk = np.nan
-
-                    cv_val = float(fila['Coef. Variación']) if pd.notna(fila['Coef. Variación']) else np.nan
-                    kurt_val = float(fila['Kurtosis']) if pd.notna(fila['Kurtosis']) else np.nan
-
-                    forma = "No concluyente" if np.isnan(sk) else \
-                            "Sesgo a la derecha" if sk > 0.5 else \
-                            "Sesgo a la izquierda" if sk < -0.5 else "Aproximadamente simétrica"
-                    disp = "No concluyente" if np.isnan(cv_val) else \
-                           "Baja dispersión" if cv_val < 30 else \
-                           "Dispersión media" if cv_val < 60 else "Alta dispersión"
-                    cola = "No concluyente" if np.isnan(kurt_val) else \
-                           "Colas pesadas (leptocúrtica)" if kurt_val > 3 else \
-                           "Colas ligeras (platicúrtica)" if kurt_val < 3 else "Mesocúrtica"
-
-                    interpret_rows.append({
-                        'Año': int(ano), 'Proyectos': int(fila['NumProy (base)']),
-                        'Pico principal (S/)': pico_principal,
-                        'Media (S/)': float(fila['Media']), 'Mediana (S/)': float(fila['Mediana']),
-                        'Q1 (S/)': float(fila['Q1']), 'Q3 (S/)': float(fila['Q3']),
-                        'Coef. Variación (%)': cv_val, 'Kurtosis': kurt_val,
-                        'Asimetría': sk, 'Forma': forma, 'Dispersión': disp, 'Colas': cola,
-                    })
-
-                if interpret_rows:
-                    df_interp = pd.DataFrame(interpret_rows).sort_values('Año')
-                    st.dataframe(df_interp.style.format({
-                        'Pico principal (S/)': '{:,.2f}', 'Media (S/)': '{:,.2f}',
-                        'Mediana (S/)': '{:,.2f}', 'Q1 (S/)': '{:,.2f}', 'Q3 (S/)': '{:,.2f}',
-                        'Coef. Variación (%)': '{:,.2f}', 'Kurtosis': '{:,.4f}',
-                        'Asimetría': '{:,.4f}',
-                    }), use_container_width=True)
-
-                    resumen = []
-                    if df_interp['Coef. Variación (%)'].notna().any():
-                        idx_cv = df_interp['Coef. Variación (%)'].idxmax()
-                        resumen.append(
-                            f"- Mayor variabilidad relativa: {int(df_interp.loc[idx_cv, 'Año'])} "
-                            f"(CV = {float(df_interp.loc[idx_cv, 'Coef. Variación (%)']):,.2f}%).")
-                    if df_interp['Pico principal (S/)'].notna().any():
-                        idx_p = df_interp['Pico principal (S/)'].idxmax()
-                        resumen.append(
-                            f"- Mayor concentración en montos altos: "
-                            f"{int(df_interp.loc[idx_p, 'Año'])} "
-                            f"(pico ≈ S/ {float(df_interp.loc[idx_p, 'Pico principal (S/)']):,.2f}).")
-                    if resumen:
-                        st.markdown("\n".join(resumen))
-
-            # ==================================================================
-            # CUARTILES
-            # ==================================================================
-            st.markdown("#### Cuartiles, Media y Mediana por Año")
-            df_q = df_var[['Año', 'Q1', 'Q2', 'Q3', 'Media', 'Mediana']].copy().sort_values('Año')
-            st.dataframe(df_q.style.format({
-                'Q1': '{:,.2f}', 'Q2': '{:,.2f}', 'Q3': '{:,.2f}',
-                'Media': '{:,.2f}', 'Mediana': '{:,.2f}'
-            }), use_container_width=True)
-
-            x_q = df_q['Año'].astype(int).astype(str)
-            fig_q = go.Figure()
-            fig_q.add_trace(go.Scatter(x=x_q, y=df_q['Q1'], mode='lines+markers', name='Q1'))
-            fig_q.add_trace(go.Scatter(x=x_q, y=df_q['Q2'], mode='lines+markers', name='Q2 (Mediana)'))
-            fig_q.add_trace(go.Scatter(x=x_q, y=df_q['Q3'], mode='lines+markers', name='Q3'))
-            fig_q.add_trace(go.Scatter(x=x_q, y=df_q['Media'], mode='lines+markers',
-                                        name='Media', line=dict(dash='dash')))
-            fig_q.update_layout(title=f'Cuartiles y Media de {variable_sel} por Año',
-                xaxis_title='Año', yaxis_title='Valor (S/)', xaxis=ax_cat, hovermode='x unified')
-            st.plotly_chart(fig_q, use_container_width=True)
-
+        with st.container():
+            if not df_stats.empty:
+                variables = sorted(df_stats['Variable'].unique())
+                variable_sel = st.selectbox("Seleccionar Variable", variables, key='variable_est')
+                df_var = df_stats[df_stats['Variable'] == variable_sel].sort_values('Año')
+                df_var = df_var[df_var['Año'].between(2000, 2100)]
+                anos_ticks = [str(int(a)) for a in sorted(df_var['Año'].dropna().astype(int).unique())]
+    
+                st.markdown(f"#### Estadísticas de {variable_sel}")
+                st.caption("ℹ️ **Conteo (NumProy)** = proyectos únicos con PIA>0 ó PIM>0 ó DEVENGADO>0")
+    
+                cols_show = ['Año', 'NumProy (base)', 'Conteo No Cero', 'Suma', 'Media', 'Mediana',
+                             'Desv.Est.', 'Coef. Variación', 'Kurtosis', 'Mín', 'Q1', 'Q2', 'Q3',
+                             'Máx', 'Rango']
+                df_disp = df_var[[c for c in cols_show if c in df_var.columns]].copy()
+                st.dataframe(df_disp.style.format({
+                    'NumProy (base)': '{:,.0f}', 'Conteo No Cero': '{:,.0f}',
+                    'Suma': '{:,.2f}', 'Media': '{:,.2f}', 'Mediana': '{:,.2f}',
+                    'Desv.Est.': '{:,.2f}', 'Coef. Variación': '{:,.2f}%', 'Kurtosis': '{:,.4f}',
+                    'Mín': '{:,.2f}', 'Q1': '{:,.2f}', 'Q2': '{:,.2f}', 'Q3': '{:,.2f}',
+                    'Máx': '{:,.2f}', 'Rango': '{:,.2f}',
+                }, na_rep=''), use_container_width=True, key="tabla_estadisticas_desc")
+    
+                st.markdown("---")
+                ax_cat = dict(type='category', categoryorder='array', categoryarray=anos_ticks)
+                x_v = df_var['Año'].astype(int).astype(str)
+    
+                col_g1, col_g2 = st.columns(2)
+                with col_g1:
+                    fig_mm = go.Figure()
+                    fig_mm.add_trace(go.Scatter(x=x_v, y=df_var['Media'], mode='lines+markers',
+                        name='Media', line=dict(color='#636EFA', width=2), marker=dict(size=8)))
+                    fig_mm.add_trace(go.Scatter(x=x_v, y=df_var['Mediana'], mode='lines+markers',
+                        name='Mediana', line=dict(color='#EF553B', width=2, dash='dash'), marker=dict(size=8)))
+                    fig_mm.update_layout(title=f'Media y Mediana de {variable_sel}',
+                        xaxis_title='Año', yaxis_title='Valor (S/)', hovermode='x unified', xaxis=ax_cat)
+                    st.plotly_chart(fig_mm, use_container_width=True, key="media_mediana")
+                with col_g2:
+                    fig_sd = go.Figure()
+                    fig_sd.add_trace(go.Bar(x=x_v, y=df_var['Desv.Est.'], name='Desv.Est.',
+                        marker=dict(color='#00CC96')))
+                    fig_sd.update_layout(title=f'Desviación Estándar de {variable_sel}',
+                        xaxis_title='Año', yaxis_title='Desv. Est. (S/)', xaxis=ax_cat)
+                    st.plotly_chart(fig_sd, use_container_width=True, key="desv_estandar")
+    
+                col_g3, col_g4 = st.columns(2)
+                with col_g3:
+                    fig_cv = go.Figure()
+                    fig_cv.add_trace(go.Bar(x=x_v, y=df_var['Coef. Variación'],
+                        name='CV', marker=dict(color='#FFA600')))
+                    fig_cv.update_layout(title=f'Coef. Variación de {variable_sel}',
+                        xaxis_title='Año', yaxis_title='CV (%)', xaxis=ax_cat)
+                    st.plotly_chart(fig_cv, use_container_width=True, key="coef_variacion")
+                with col_g4:
+                    fig_k = go.Figure()
+                    fig_k.add_trace(go.Scatter(x=x_v, y=df_var['Kurtosis'], mode='lines+markers',
+                        name='Kurtosis', line=dict(color='#BC5090', width=2), marker=dict(size=8)))
+                    fig_k.update_layout(title=f'Kurtosis de {variable_sel}',
+                        xaxis_title='Año', yaxis_title='Kurtosis', hovermode='x unified', xaxis=ax_cat)
+                    st.plotly_chart(fig_k, use_container_width=True, key="kurtosis_chart")
+    
+                # ==================================================================
+                # BOX PLOT – WebGL (Scattergl) para evitar congelamiento del browser
+                # ==================================================================
+                st.markdown("#### Gráfico de Cajas (Box Plot) por Año")
+    
+                with st.spinner("Preparando datos de distribución…"):
+                    base_box = _obtener_base_proyectos(stats_where)
+    
+                col_var_name = f"MONTO_{variable_sel}"
+    
+                if not base_box.is_empty() and col_var_name in base_box.columns:
+                    anos_box = sorted([int(a) for a in df_var['Año'].dropna().astype(int).unique()
+                                       if 2000 <= int(a) <= 2100])
+    
+                    max_puntos = st.slider("Puntos máximos en Box Plot", 500, 8000, 1500, 500,
+                                            key='max_puntos_boxplot')
+    
+                    # Pre-extraer todos los arrays UNA vez (no 3x por año)
+                    arrays_by_year = {}
+                    for ano in anos_box:
+                        arr = base_box.filter(pl.col('ANO_EJE') == ano)[col_var_name].to_numpy().astype(np.float64)
+                        arrays_by_year[ano] = np.nan_to_num(arr, 0.0)
+    
+                    fig_box = go.Figure()
+                    for i, ano in enumerate(anos_box):
+                        arr = arrays_by_year[ano]
+                        if len(arr) == 0:
+                            continue
+                        color = COLORES_BOX[i % len(COLORES_BOX)]
+    
+                        cuota = max(1, max_puntos // max(len(anos_box), 1))
+                        if len(arr) > cuota:
+                            display = arr[np.random.default_rng(42).choice(len(arr), cuota, replace=False)]
+                        else:
+                            display = arr
+    
+                        jitter = np.random.default_rng(42 + i).uniform(-0.25, 0.25, len(display))
+    
+                        # *** Scattergl = WebGL = NO congela el browser ***
+                        fig_box.add_trace(go.Scattergl(
+                            x=(i + jitter).tolist(), y=display.tolist(), mode='markers',
+                            marker=dict(size=5, color=color, opacity=0.55),
+                            name=str(ano), legendgroup=str(ano), showlegend=False,
+                            hovertemplate=f'Año: {ano}<br>Valor: %{{y:,.2f}}<extra></extra>'))
+    
+                        q1 = float(np.percentile(arr, 25))
+                        q2 = float(np.median(arr))
+                        q3 = float(np.percentile(arr, 75))
+                        iqr = q3 - q1
+                        lower = arr[arr >= q1 - 1.5 * iqr]
+                        upper = arr[arr <= q3 + 1.5 * iqr]
+                        lf = float(lower.min()) if len(lower) else float(arr.min())
+                        uf = float(upper.max()) if len(upper) else float(arr.max())
+    
+                        fig_box.add_trace(go.Box(
+                            x0=i, q1=[q1], median=[q2], q3=[q3],
+                            lowerfence=[lf], upperfence=[uf], mean=[float(np.mean(arr))],
+                            name=str(ano), legendgroup=str(ano), showlegend=True,
+                            boxmean=True, boxpoints=False, width=0.5,
+                            line=dict(width=2, color=color), fillcolor='rgba(255,255,255,0.1)'))
+    
+                    fig_box.update_layout(
+                        title=f'Distribución de proyectos - {variable_sel} por Año',
+                        xaxis_title='Año', yaxis_title=f'{variable_sel} (S/)',
+                        xaxis=dict(tickvals=list(range(len(anos_box))),
+                                   ticktext=[str(a) for a in anos_box]),
+                        legend=dict(title='Año'), height=600)
+                    st.plotly_chart(fig_box, use_container_width=True, key="boxplot_estadistico")
+    
+                    # ==============================================================
+                    # DENSIDAD (reutiliza arrays_by_year)
+                    # ==============================================================
+                    st.markdown("#### Gráfico de Densidad por Año")
+                    fig_dens = go.Figure()
+                    for i, ano in enumerate(anos_box):
+                        arr = arrays_by_year[ano]
+                        arr = arr[~np.isnan(arr)]
+                        if len(arr) < 2:
+                            continue
+                        density, bins = np.histogram(arr, bins=50, density=True)
+                        centers = (bins[:-1] + bins[1:]) / 2
+                        color = COLORES_BOX[i % len(COLORES_BOX)]
+                        fig_dens.add_trace(go.Scatter(x=centers, y=density, mode='lines',
+                            name=str(ano), line=dict(color=color, width=2),
+                            fill='tozeroy', opacity=0.18))
+                    fig_dens.update_layout(title=f'Densidad de {variable_sel} por Año',
+                        xaxis_title=f'{variable_sel} (S/)', yaxis_title='Densidad',
+                        hovermode='x unified', height=460)
+                    st.plotly_chart(fig_dens, use_container_width=True, key="densidad_anual")
+    
+                    # ==============================================================
+                    # INTERPRETACIÓN (reutiliza arrays_by_year)
+                    # ==============================================================
+                    st.markdown("#### Interpretación Automática de la Densidad")
+                    interpret_rows = []
+                    for ano in anos_box:
+                        fila = df_var[df_var['Año'] == ano]
+                        if fila.empty:
+                            continue
+                        fila = fila.iloc[0]
+                        arr = arrays_by_year[ano]
+                        arr_clean = arr[~np.isnan(arr)]
+                        if len(arr_clean) == 0:
+                            continue
+    
+                        dens, bins = np.histogram(arr_clean, bins=60, density=True)
+                        pico_x = (bins[:-1] + bins[1:]) / 2
+                        pico_principal = float(pico_x[np.argmax(dens)])
+    
+                        m = float(np.mean(arr_clean))
+                        s = float(np.std(arr_clean, ddof=1)) if len(arr_clean) > 1 else 0.0
+                        if len(arr_clean) > 2 and s > 0:
+                            n = len(arr_clean)
+                            sk = n / ((n-1)*(n-2)) * np.sum(((arr_clean - m) / s) ** 3)
+                        else:
+                            sk = np.nan
+    
+                        cv_val = float(fila['Coef. Variación']) if pd.notna(fila['Coef. Variación']) else np.nan
+                        kurt_val = float(fila['Kurtosis']) if pd.notna(fila['Kurtosis']) else np.nan
+    
+                        forma = "No concluyente" if np.isnan(sk) else \
+                                "Sesgo a la derecha" if sk > 0.5 else \
+                                "Sesgo a la izquierda" if sk < -0.5 else "Aproximadamente simétrica"
+                        disp = "No concluyente" if np.isnan(cv_val) else \
+                               "Baja dispersión" if cv_val < 30 else \
+                               "Dispersión media" if cv_val < 60 else "Alta dispersión"
+                        cola = "No concluyente" if np.isnan(kurt_val) else \
+                               "Colas pesadas (leptocúrtica)" if kurt_val > 3 else \
+                               "Colas ligeras (platicúrtica)" if kurt_val < 3 else "Mesocúrtica"
+    
+                        interpret_rows.append({
+                            'Año': int(ano), 'Proyectos': int(fila['NumProy (base)']),
+                            'Pico principal (S/)': pico_principal,
+                            'Media (S/)': float(fila['Media']), 'Mediana (S/)': float(fila['Mediana']),
+                            'Q1 (S/)': float(fila['Q1']), 'Q3 (S/)': float(fila['Q3']),
+                            'Coef. Variación (%)': cv_val, 'Kurtosis': kurt_val,
+                            'Asimetría': sk, 'Forma': forma, 'Dispersión': disp, 'Colas': cola,
+                        })
+    
+                    if interpret_rows:
+                        df_interp = pd.DataFrame(interpret_rows).sort_values('Año')
+                        st.dataframe(df_interp.style.format({
+                            'Pico principal (S/)': '{:,.2f}', 'Media (S/)': '{:,.2f}',
+                            'Mediana (S/)': '{:,.2f}', 'Q1 (S/)': '{:,.2f}', 'Q3 (S/)': '{:,.2f}',
+                            'Coef. Variación (%)': '{:,.2f}', 'Kurtosis': '{:,.4f}',
+                            'Asimetría': '{:,.4f}',
+                        }), use_container_width=True, key="tabla_interpretacion")
+    
+                        resumen = []
+                        if df_interp['Coef. Variación (%)'].notna().any():
+                            idx_cv = df_interp['Coef. Variación (%)'].idxmax()
+                            resumen.append(
+                                f"- Mayor variabilidad relativa: {int(df_interp.loc[idx_cv, 'Año'])} "
+                                f"(CV = {float(df_interp.loc[idx_cv, 'Coef. Variación (%)']):,.2f}%).")
+                        if df_interp['Pico principal (S/)'].notna().any():
+                            idx_p = df_interp['Pico principal (S/)'].idxmax()
+                            resumen.append(
+                                f"- Mayor concentración en montos altos: "
+                                f"{int(df_interp.loc[idx_p, 'Año'])} "
+                                f"(pico ≈ S/ {float(df_interp.loc[idx_p, 'Pico principal (S/)']):,.2f}).")
+                        if resumen:
+                            st.markdown("\n".join(resumen))
+    
+                # ==================================================================
+                # CUARTILES
+                # ==================================================================
+                st.markdown("#### Cuartiles, Media y Mediana por Año")
+                df_q = df_var[['Año', 'Q1', 'Q2', 'Q3', 'Media', 'Mediana']].copy().sort_values('Año')
+                st.dataframe(df_q.style.format({
+                    'Q1': '{:,.2f}', 'Q2': '{:,.2f}', 'Q3': '{:,.2f}',
+                    'Media': '{:,.2f}', 'Mediana': '{:,.2f}'
+                }), use_container_width=True, key="tabla_cuartiles")
+    
+                x_q = df_q['Año'].astype(int).astype(str)
+                fig_q = go.Figure()
+                fig_q.add_trace(go.Scatter(x=x_q, y=df_q['Q1'], mode='lines+markers', name='Q1'))
+                fig_q.add_trace(go.Scatter(x=x_q, y=df_q['Q2'], mode='lines+markers', name='Q2 (Mediana)'))
+                fig_q.add_trace(go.Scatter(x=x_q, y=df_q['Q3'], mode='lines+markers', name='Q3'))
+                fig_q.add_trace(go.Scatter(x=x_q, y=df_q['Media'], mode='lines+markers',
+                                            name='Media', line=dict(dash='dash')))
+                fig_q.update_layout(title=f'Cuartiles y Media de {variable_sel} por Año',
+                    xaxis_title='Año', yaxis_title='Valor (S/)', xaxis=ax_cat, hovermode='x unified')
+                st.plotly_chart(fig_q, use_container_width=True, key="cuartiles_anual")
+            else:
+                st.info("No hay datos estadísticos para mostrar con los filtros seleccionados.")
+    
     # =========================================================================
     st.markdown("---")
-    st.markdown("""
-    <div style='text-align: center; color: gray;'>
-        📊 Dashboard de Ejecución Presupuestal | Datos: 2014-2025 |
-        v3.0 Optimizado con Polars + DuckDB
-    </div>
-    """, unsafe_allow_html=True)
+    st.caption("📊 Dashboard de Ejecución Presupuestal | Datos: 2014-2025 | v3.0 Optimizado con Polars + DuckDB")
 
 
 if __name__ == "__main__":
