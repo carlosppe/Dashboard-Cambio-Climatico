@@ -517,12 +517,16 @@ def main():
 
         st.markdown("---")
 
-        tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-            "📋 Por Sector", "📊 Por Pliego", "📈 Evolución Anual",
-            "🗺️ Por Departamento", "🔧 Por Grupo Funcional", "🎯 Por Función"])
+        vista_sel = st.radio(
+            "Seleccionar vista:",
+            ["📋 Por Sector", "📊 Por Pliego", "📈 Evolución Anual",
+             "🗺️ Por Departamento", "🔧 Por Grupo Funcional", "🎯 Por Función"],
+            horizontal=True,
+            key="vista_dashboard"
+        )
 
         # --- Sector ---
-        with tab1:
+        if vista_sel == "📋 Por Sector":
             st.markdown("### Análisis por SECTOR_NOMBRE")
             with st.spinner("Procesando…"):
                 df_sec = crear_tabla_agrupada(sidebar_where, 'SECTOR_NOMBRE')
@@ -536,7 +540,7 @@ def main():
                     st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Pliego ---
-        with tab2:
+        elif vista_sel == "📊 Por Pliego":
             st.markdown("### Análisis por PLIEGO_NOMBRE")
             sectores_pli = _opciones('SECTOR_NOMBRE', sidebar_where, 'Todos')
             sector_sel = st.selectbox("Filtrar por Sector:", sectores_pli, key='sector_pliego')
@@ -552,7 +556,7 @@ def main():
                     st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Evolución Anual ---
-        with tab3:
+        elif vista_sel == "📈 Evolución Anual":
             st.markdown("### Evolución Anual")
             with st.spinner("Procesando…"):
                 df_anual = obtener_evolucion_anual(sidebar_where)
@@ -598,7 +602,7 @@ def main():
                     st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Departamento ---
-        with tab4:
+        elif vista_sel == "🗺️ Por Departamento":
             st.markdown("### Análisis por Departamento")
             with st.spinner("Procesando…"):
                 df_dep = crear_tabla_agrupada(sidebar_where, 'DEPARTAMENTO_EJECUTORA_NOMBRE')
@@ -622,7 +626,7 @@ def main():
                     st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Grupo Funcional ---
-        with tab5:
+        elif vista_sel == "🔧 Por Grupo Funcional":
             st.markdown("### Análisis por Grupo Funcional")
             with st.spinner("Procesando…"):
                 df_gf = crear_tabla_agrupada(sidebar_where, 'GRUPO_FUNCIONAL_NOMBRE')
@@ -637,7 +641,7 @@ def main():
                     st.info("No hay datos para mostrar con los filtros seleccionados.")
 
         # --- Función ---
-        with tab6:
+        elif vista_sel == "🎯 Por Función":
             st.markdown("### Análisis por Función")
             with st.spinner("Procesando…"):
                 df_fn = crear_tabla_agrupada(sidebar_where, 'FUNCION_NOMBRE')
